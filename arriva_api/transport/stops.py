@@ -1,6 +1,7 @@
 from . import _rest_adapter
 
 from datetime import datetime
+import math
 
 
 ## vvv Classes vvv ##
@@ -30,15 +31,20 @@ class Stop():
     Una parada de bus
     """
 
-    def __init__(self, id: int, type: str, name: str = None, name_council: str = None, peso: int = None, location: Location = None, lat: float = None, long: float = None, on_demand: bool = None, school_integration: bool = None, ordinal: int = None, bus_stop_id: int = None, bus_stop_code: str = None, sitme_id: int = None, town_name: str = None, time: datetime = None):
+    def __init__(self, id: int, name: str = None, name_council: str = None, peso: int = None, location: Location = None, lat: float = None, long: float = None, school_integration: bool = None, ordinal: int = None, simob_id: int = None, council_simob: str = None, sitme_id: int = None, time: datetime = None):
         self.id = id
         """
-        Id de la parada dentro del sistema de Arriva. (Existen otras numeraciones)
+        Id de la parada dentro del sistema de Arriva. También llamado superparada_id
         """
 
         self.name = name
         """
         Nombre de la parada
+        """
+
+        self.council_simob = council_simob
+        """
+        Id del ayuntamiento del SIMOB (Nuevo sistema de la Xunta), se numeran igual que los numera el INE.
         """
 
         self.name_council = name_council
@@ -67,34 +73,24 @@ class Stop():
         El orden que ocupa dentro de una ruta
         """
 
-        self.bus_stop_id = bus_stop_id
+        self.simob_id = simob_id
         """
-        Id the API gives only in expedition details. Idk what it represents, but it's not the same across expeditions (of different lines)
-        """
-
-        self.bus_stop_code = bus_stop_code
-        """
-        Code the API gives only in expedition details. Again, no idea of its purpose
+        Id de la parada dentro del sistema de Arriva. Se compone de dos elementos, ayuntamiento y parada e incluso posición (15030-1-2 es la parada 1 del sentido 2 del ayuntamiento 15030)
         """
 
         self.sitme_id = sitme_id
         """
-        Given in `location_search_stops`. Used for real-time
-        """
-
-        self.town_name = town_name
-        """
-        Given in `busGal_api.transport.trips.get_expeditions_from_stop`
+        También llamado gescar_id. Es usando en el last_area o en el SIRI de la Xunta
         """
 
         self.time = time
         """
-        Indicates the time at wich the bus goes trough the stop during an expedition
+        Indica la hora de paso del bus por la parada en una expedición
         """
 
     def fetch_name(self) -> str:
         """
-        Fetch the name (and set it) for this stop id from the API
+        Obtiene el nombre (y lo asocia) para este id de parada de la API
         """
 
         self.name = get_stop_name(self.id)
@@ -103,7 +99,7 @@ class Stop():
 
     def fetch_location(self) -> Location:
         """
-        Fetch the location (and set it) for this stop id from the API
+        Obitiene la ubicación (y la asocia) para este id de parada de la API
         """
 
         self.location = get_stop_location(self.id)
@@ -118,117 +114,132 @@ class Stop():
 
 ## vvv Methods vvv ##
 
-def _parse_stop_search_results(data: dict, type: str = "busstop") -> list[Stop]:
+def search_stops(query: str, num_results: int = 2147483647) -> list[Stop]:
     """
-    Helper function to parse the JSON data (already parsed into a Python dict) returned by the API from either `location_searc_stop` or `search_stop` into a list of Stop objects
+    Busca paradas por su nombre, usando la API de Arriva.
 
-    :param data: API results, parsed from JSON
-
-    :param type: Type to assign to stops which don't have it in the results. Defaults to busstop
+    :param query: Nombre de la búsqueda
+    :param num_results: Numero de resultados a devolver. Por defecto, el valor entero máximo que acepta la API, es decir, el valor positivo máximo para un entero binario con signo de 32 bits (2,147,483,647).
     """
+
+    # Llamar al endpoint de la API
+    data = _rest_adapter.get(endpoint="/superparadas/index/buscador.json")
 
     stops = []
-    for el in data:
-        stop = Stop(id=el["id"], type=el.get("type", type),
-                    name=el["text"], group_type=el.get("group_type"))  # group_type not specified in location-based search results, neither when getting all councils
-        try:
-            location = el["location"]
-            stop.location = Location(
-                location["latitude"], location["longitude"])
-        except KeyError:
-            pass
 
-        stops.append(stop)
+    # Recorrer las paradas devueltas por la API
+    for parada_data in data['paradas']:
+        # Si la búsqueda es por nombre, filtramos
+        if query.lower() in parada_data["nombre"].lower():
+            # Crear objeto Location
+            location = Location(lat=parada_data.get("lat"),
+                                long=parada_data.get("lon"))
+
+            # Crear objeto Stop
+            stop = Stop(
+                id=parada_data["parada"],
+                name=parada_data["nombre"],
+                name_council=parada_data.get("nom_web"),
+                peso=parada_data.get("peso"),
+                location=location
+            )
+
+            stops.append(stop)
+
+            # Limitar el número de resultados si es necesario
+            if len(stops) >= num_results:
+                break
 
     return stops
 
 
-def search_stops(query: str, councils: bool = True, num_results: int = 2147483647) -> list[Stop]:
+    
+
+
+def get_all_stops() -> list[Stop]:
     """
-    Searchs for stops with the specified name, using the app's search API, which is actually meant for autocomplete
-
-    :param query: Search query
-
-    :param councils: Whether to show council/municipality stops. By default, it does. Note that disabling this queries a different endpoint
-
-    :param num_results: Number of results to return. Defaults to the maximum integer value the API would accept, a.k.a. the maximum positive value for a 32-bit signed binary integer, a.k.a. 2,147,483,647
+    Obtiene todas las paradas existentes (llama a `search_stops` con una query vacía)
     """
 
-    if councils:
-        endpoint = "/busstops/autocomplete"
-    else:
-        endpoint = "/busstops/autocomplete-only-busstops"
+    return search_stops(query='')
 
-    return _parse_stop_search_results(_rest_adapter.get(endpoint,
-                                                        ep_params={"text": query,
-                                                                   "num_results": num_results}))
-
-
-def get_all_stops(councils: bool = True) -> list[Stop]:
+def haversine(lat1, lon1, lat2, lon2):
     """
-    Gets all the existing stops (calls `search_stops` with an empty query)
-
-    :param councils: Whether to show council/municipality stops. By default, it does. Note that disabling this queries a different endpoint
+    Calcula la distancia del círculo máximo en kilómetros entre dos puntos 
+    en la Tierra (especificado en grados decimales).
     """
+    # Convertir decimal degrees a radians
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
 
-    return search_stops(query='', councils=councils)
+    # Diferencia entre las coordenadas
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
 
-
-def get_all_councils() -> list[Stop]:
-    """
-    Gets all the existing councils
-    """
-    return _parse_stop_search_results(_rest_adapter.get("/municipalities"))
-
+    # Fórmula Haversine
+    a = math.sin(dlat / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
+    c = 2 * math.asin(math.sqrt(a))
+    r = 6371  # Radio de la Tierra en kilómetros
+    return c * r
 
 def location_search_stops(location: Location = None, lat: float = None, long: float = None, radius=5) -> list[Stop]:
     """
-    Searchs for stops within a given radius of a geographic point. You must either provide `location` or both `lat` & `long`. Note that if you give a `Location` object, it will be unpacked anyway.
+    Busca por las paradas existentes en un punto con un determinado radio (latitud, longitud).
 
-    :param radius: Radius (in kilometers) for the search. Defaults to `5`
+    :param lat: Latitud del punto de búsqueda.
+    :param lon: Longitud del punto de búsqueda.
+    :param radius: Radio en kilómetros para la búsqueda.
     """
 
-    # Required arguments logic (either location or both lat & long)
-    if location:
-        lat = location.lat
-        long = location.long
-    else:
-        if not (lat and long):
-            raise TypeError(
-                "location_search_stops() expected either the 'location' or both the 'lat' and 'long' arguments")
+    # Llamar al endpoint de la API para obtener todas las paradas
+    data = _rest_adapter.get(endpoint="/superparadas/index/buscador.json")
 
-    return _parse_stop_search_results(_rest_adapter.get("/busstops/in-range",
-                                                        ep_params={"latitude": lat,
-                                                                   "longitude": long,
-                                                                   "range": radius}))
+    stops_in_range = []
+
+    # Recorrer todas las paradas devueltas por la API
+    for parada_data in data['paradas']:
+        # Obtener la latitud y longitud de la parada
+        parada_lat = parada_data.get("lat")
+        parada_lon = parada_data.get("lon")
+
+        # Calcular la distancia desde el punto dado hasta la parada
+        distance = haversine(lat, long, parada_lat, parada_lon)
+
+        # Si la parada está dentro del rango especificado
+        if distance <= radius:
+            # Crear objeto Location
+            location = Location(lat=parada_lat, long=parada_lon)
+
+            # Crear objeto Stop
+            stop = Stop(
+                id=parada_data["parada"],
+                name=parada_data["nombre"],
+                name_council=parada_data.get("nom_web"),
+                peso=parada_data.get("peso"),
+                location=location
+            )
+
+            stops_in_range.append(stop)
+
+    return stops_in_range
 
 
-def get_stop_name(stop_id: int, alternative: bool = True) -> str:
+def get_stop_name(stop_id: int) -> str:
     """
-    Fetch the name of a stop. **WARNING**: The API seems to have deprecated this somehow; altough I got it to work when trying random ids with `15004`, but the returned name is wrong; therefore I made a hacky alternative to fetch a stop's name, based on `busGal_api.transport.trips.get_expeditions_from_stop`
-
-    :param alternative: Whether to use the alternative, hacky, but working ;) method (it does by default)
+    Obtiene el nombre de una parada por su id
     """
 
-    if alternative:
-        data = _rest_adapter.get("/public/expedition/from",
-                                 ep_params={"stopId": stop_id,
-                                            "tripDate": datetime.now().strftime("%d/%m/%Y %H:%M")})
+    data = _rest_adapter.get(endpoint=f"/superparadas/expediciones-fecha/{stop_id}.json")
 
-        return data[0]["stop_name"]
-
-    return _rest_adapter.get("/busstops/get",
-                             ep_params={"stop_id": stop_id})
+    return data["paradas"][0]["nom_parada"]
 
 
 def get_stop_location(stop_id: int) -> Location:
     """
-    Fetch the location of a stop. **WARNING**: The API seems to have deprecated this. Same problem as `get_stop_name`
+    Obtiene la ubicación de una parada por su id
     """
 
-    data = _rest_adapter.get("/busstops/busstop-location",
-                             ep_params={"id": stop_id})
+    data = _rest_adapter.get(endpoint=f"/superparadas/expediciones-fecha/{stop_id}.json")
 
-    return Location(data["latitude"], data["longitude"])
+    return Location(data["paradas"][0]["lat"], data["paradas"][0]["lon"])
 
 ## ^^^ Methods ^^^ ##
