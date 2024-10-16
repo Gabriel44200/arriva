@@ -8,7 +8,7 @@ obtener información sobre horarios y buses. Estos endpoints se obtenieron usand
 
 La documentación está disponible [aquí](https://tpgalicia.github.io/autonomic/operator/arriva/). Existen dos submódulos: `arriva_api.transport` y `arriva_api.accounts`, el primero tiene toda la información sobre transporte y la segunda sobre tus billetes y cuenta (en desarrollo), como su nombre indica.
 
-## 🔧 Instalacin
+## 🔧 Instalación
 
 Simplemente ejecuta:
 
