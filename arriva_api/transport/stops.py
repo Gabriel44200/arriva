@@ -7,18 +7,18 @@ from datetime import datetime
 
 class Location():
     """
-    A location (latitude and longitude)
+    Una ubicación geográfica (latitud y longitud)
     """
 
     def __init__(self, lat: float, long: float):
         self.lat = float(lat)
         """
-        Latitude
+        Latitud
         """
 
         self.long = float(long)
         """
-        Longitude
+        Longitud
         """
 
     def __repr__(self):
@@ -27,53 +27,44 @@ class Location():
 
 class Stop():
     """
-    A bus stop (municipalities are also considered stops)
+    Una parada de bus
     """
 
-    def __init__(self, id: int, type: str, name: str = None, group_type: int = None, location: Location = None, lat: float = None, long: float = None, on_demand: bool = None, school_integration: bool = None, ordinal: int = None, bus_stop_id: int = None, bus_stop_code: str = None, sitme_id: int = None, town_name: str = None, time: datetime = None):
+    def __init__(self, id: int, type: str, name: str = None, name_council: str = None, peso: int = None, location: Location = None, lat: float = None, long: float = None, on_demand: bool = None, school_integration: bool = None, ordinal: int = None, bus_stop_id: int = None, bus_stop_code: str = None, sitme_id: int = None, town_name: str = None, time: datetime = None):
         self.id = id
         """
-        Id of the stop. These aren't actually unique, as i've found them changing from time to time
-        """
-
-        self.type = type
-        """
-        What kind of stop this is (`busstop`/`municipality`)
+        Id de la parada dentro del sistema de Arriva. (Existen otras numeraciones)
         """
 
         self.name = name
         """
-        Name of the stop
+        Nombre de la parada
         """
 
-        self.group_type = group_type
+        self.name_council = name_council
         """
-        Group of results to which the stop belongs: 
-        - 1: City council
-        - 2: Main stops of the city council/s that coincide with the text of search
-        - 3: Non-main stops of the city council
-        - 4: Stops matching the text entered, but from other city councils.
+        Nombre de la parada con el ayuntamiento entre paréntesis
+        """
+
+        self.peso = peso
+        """
+        Peso de la parada ( ¯_(ツ)_/¯ )
         """
 
         self.location = location or (
             Location(lat, long) if lat and long else None)
         """
-        Location of the stop
-        """
-
-        self.on_demand = bool(on_demand)
-        """
-        Whether the stop works on demand
+        Posición geográfica de la parada
         """
 
         self.school_integration = bool(school_integration)
         """
-        Whether the stop has school integration
+        Indica si es un servicio escolar integrado
         """
 
         self.ordinal = ordinal
         """
-        Not sure, I guess it indicates some kind of order
+        El orden que ocupa dentro de una ruta
         """
 
         self.bus_stop_id = bus_stop_id
